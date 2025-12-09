@@ -1,0 +1,350 @@
+/* Landing page */
+.landing {
+  display: grid;
+  gap: 32px;
+}
+
+.preview-row {
+  display: grid;
+  grid-template-columns: 260px 1fr;
+  gap: 32px;
+  align-items: center;
+  justify-content: center;
+}
+
+.card-preview {
+  background: var(--pink);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 14px;
+  width: 220px;
+  box-shadow: var(--shadow);
+  font-size: 12px;
+}
+
+.card-preview .thumb {
+  margin: 8px 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  height: 160px;
+  background: linear-gradient(180deg, #f9f0f0, #ffffff);
+}
+
+.editor-label {
+  text-align: center;
+  font-weight: 700;
+  margin-bottom: 12px;
+}
+
+.editor-box {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: linear-gradient(180deg, #ffffff, #f9f5f5);
+  height: 260px;
+  box-shadow: var(--shadow);
+}
+
+.steps-block {
+  background: linear-gradient(135deg, var(--pink) 0%, var(--pink-light) 100%);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  padding: 36px 32px 24px;
+  display: grid;
+  gap: 24px;
+  box-shadow: var(--shadow);
+  transition: all 0.3s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+.steps-block::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 4px;
+  background: linear-gradient(90deg, #ff8fb1, #ff9f9f, #ff8fb1);
+  background-size: 200% 100%;
+  animation: shimmer 3s ease-in-out infinite;
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+.steps-block:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-hover);
+}
+
+.steps-title {
+  font-weight: 700;
+  margin: 0;
+}
+
+.steps-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 20px;
+  width: 100%;
+  max-width: 100%;
+}
+
+.step-card {
+  display: grid;
+  gap: 8px;
+  font-size: 13px;
+  min-width: 0;
+  max-width: 100%;
+  padding: 16px;
+  background: rgba(255, 255, 255, 0.6);
+  border-radius: var(--radius-sm);
+  transition: all 0.3s ease;
+  border: 1px solid transparent;
+}
+
+.step-card:hover {
+  background: rgba(255, 255, 255, 0.9);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  border-color: var(--pink-dark);
+}
+
+.step-num {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 2px solid #1a1a1a;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 700;
+  background: var(--white);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+  transition: all 0.3s ease;
+}
+
+.step-card:hover .step-num {
+  transform: scale(1.1);
+  background: var(--pink);
+  border-color: var(--pink-dark);
+}
+
+/* Debugger page */
+.ai {
+  display: grid;
+  grid-template-columns: 220px 1fr;
+  gap: 18px;
+}
+
+.chat-window {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--white);
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  min-height: 320px;
+  box-shadow: var(--shadow);
+  transition: all 0.3s ease;
+  overflow: hidden;
+}
+
+.chat-window:hover {
+  box-shadow: var(--shadow-hover);
+}
+
+.chat-header {
+  padding: 12px;
+  border-bottom: 1px solid var(--line);
+  font-weight: 600;
+}
+
+.code-toolbar {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  padding: 10px 16px 12px 0;
+  align-items: center;
+}
+
+.code-toolbar button {
+  min-width: 100px;
+  border-color: #e5dcdc;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.06);
+  background: linear-gradient(180deg, #ffffff, #f8f4f4);
+}
+
+.lang-info {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  align-items: center;
+  font-size: 13px;
+  margin: 0 10px 10px 0;
+  color: var(--muted);
+}
+
+.code-editor {
+  display: grid;
+  grid-template-columns: 52px 1fr;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+  transition: all 0.3s ease;
+}
+
+.code-editor:focus-within {
+  border-color: var(--pink-dark);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
+}
+
+.code-gutter {
+  background: #f5eded;
+  color: #7a6f6f;
+  padding: 12px 8px;
+  text-align: right;
+  font-family: "Cascadia Code", "Fira Code", monospace;
+  font-size: 13px;
+  line-height: 1.6;
+  border-right: 1px solid var(--line);
+  overflow: hidden;
+}
+
+.code-gutter span {
+  display: block;
+}
+
+.code-input {
+  width: 100%;
+  min-height: 180px;
+  border: none;
+  border-radius: 0;
+  padding: 12px;
+  background: #fff;
+  font-family: "Cascadia Code", "Fira Code", monospace;
+  font-size: 13px;
+  line-height: 1.6;
+  resize: vertical;
+}
+
+.code-box {
+  border: 1px solid #e4dede;
+  border-radius: 14px;
+  background: linear-gradient(180deg, #ffffff, #f9f6f6);
+  min-height: 260px;
+  padding: 16px;
+  font-family: "Cascadia Code", "Fira Code", monospace;
+  white-space: pre-wrap;
+  overflow: auto;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.04);
+}
+
+.code-box pre {
+  margin: 0;
+}
+
+.code-line {
+  display: block;
+  padding: 2px 4px;
+  border-radius: 6px;
+}
+
+.code-line.active {
+  background: #e8f0ff;
+  border-left: 3px solid #5c7cfa;
+}
+
+.result-grid {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: 14px;
+  align-items: start;
+}
+
+.vars-panel {
+  border: 1px solid #e4dede;
+  border-radius: var(--radius-lg);
+  background: #fff;
+  box-shadow: var(--shadow);
+  display: grid;
+  grid-template-rows: auto 1fr;
+  overflow: hidden;
+  transition: all 0.3s ease;
+}
+
+.vars-panel:hover {
+  box-shadow: var(--shadow-hover);
+}
+
+.vars-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 12px;
+  border-bottom: 1px solid #eee5e5;
+  font-weight: 600;
+}
+
+.vars-body {
+  padding: 0;
+  max-height: 280px;
+  overflow: auto;
+}
+
+.vars-empty {
+  text-align: center;
+  padding: 20px 6px;
+}
+
+.vars-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.vars-table th,
+.vars-table td {
+  padding: 10px 12px;
+  border-bottom: 1px solid #efe6e6;
+  text-align: left;
+}
+
+.vars-table th {
+  background: #f8f4f4;
+  font-weight: 700;
+}
+
+.vars-table tbody tr:nth-child(odd) {
+  background: #fbf8f8;
+}
+
+.vars-table tbody tr.active {
+  background: #e8f0ff;
+  box-shadow: inset 2px 0 0 #5c7cfa;
+}
+
+.var-name {
+  font-weight: 600;
+}
+
+.var-value {
+  font-family: "Cascadia Code", "Fira Code", monospace;
+  font-size: 12px;
+  color: #3b3b3b;
+  word-break: break-word;
+}
+
+/* Contact page */
+.contact {
+  display: grid;
+  gap: 16px;
+}
+

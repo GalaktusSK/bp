@@ -1,0 +1,106 @@
+/* Steps grid responsive */
+@media (min-width: 600px) and (max-width: 899px) {
+  .steps-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+}
+
+@media (min-width: 900px) {
+  .steps-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+    max-width: 100%;
+  }
+  
+  .step-card {
+    max-width: none;
+    width: 100%;
+  }
+}
+
+/* General responsive */
+@media (max-width: 720px) {
+  .page__mini {
+    position: static;
+    margin: 12px auto 0;
+  }
+
+  .page__top,
+  .page__bottom {
+    padding: 24px;
+  }
+  
+  /* Debugger responsive */
+  .ai {
+    grid-template-columns: 1fr !important;
+    gap: 16px;
+  }
+  
+  .sidebar {
+    width: 100%;
+  }
+  
+  .result-grid {
+    grid-template-columns: 1fr !important;
+    gap: 12px;
+  }
+  
+  .code-toolbar {
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 8px;
+  }
+  
+  .code-toolbar button {
+    min-width: 80px;
+    flex: 1 1 auto;
+    max-width: 120px;
+  }
+  
+  .lang-info {
+    justify-content: center;
+    margin: 0 0 10px 0;
+  }
+  
+  .code-editor {
+    grid-template-columns: 40px 1fr;
+  }
+  
+  .code-gutter {
+    padding: 12px 4px;
+    font-size: 11px;
+  }
+  
+  .code-input {
+    font-size: 13px;
+    padding: 10px;
+  }
+  
+  .vars-panel {
+    max-height: 200px;
+  }
+  
+  .vars-body {
+    max-height: 160px;
+  }
+}
+
+@media (max-width: 480px) {
+  .code-toolbar {
+    flex-direction: column;
+  }
+  
+  .code-toolbar button {
+    width: 100%;
+    max-width: none;
+  }
+  
+  .code-editor {
+    grid-template-columns: 36px 1fr;
+  }
+  
+  .code-gutter {
+    padding: 12px 2px;
+    font-size: 10px;
+  }
+}
+
