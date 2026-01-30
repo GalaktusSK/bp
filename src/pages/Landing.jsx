@@ -2,12 +2,12 @@ import Page from '../components/Page'
 import { dots } from '../utils'
 
 const steps = [
-  { n: 1, title: 'Step 1', desc: 'Choose language on the left (3 options).' },
-  { n: 2, title: 'Step 2', desc: 'Write your program in the text field.' },
-  { n: 3, title: 'Step 3', desc: 'Click run code under the text field.' },
-  { n: 4, title: 'Step 4', desc: 'Step through the code with forward/back.' },
-  { n: 5, title: 'Step 5', desc: 'Discover additional features.' },
-  { n: 6, title: 'Step 6', desc: 'When done, send us feedback.' },
+  { n: 1, title: 'Step 1', desc: 'In the Debugger, choose language (JavaScript, Python, or C) in the sidebar.' },
+  { n: 2, title: 'Step 2', desc: 'Pick a sample from "Ukážka" or write your own code in the editor.' },
+  { n: 3, title: 'Step 3', desc: 'Click Run to start; for JavaScript and Python, the execution pauses at the first line.' },
+  { n: 4, title: 'Step 4', desc: 'Use Step forward and Step back to move through the code line by line (JavaScript and Python).' },
+  { n: 5, title: 'Step 5', desc: 'Watch Variables and Console below to see current values and output.' },
+  { n: 6, title: 'Step 6', desc: 'When the program ends, "Program ukončený" is shown in the console.' },
 ]
 
 function Landing({ currentRoute }) {

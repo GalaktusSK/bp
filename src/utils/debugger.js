@@ -22,6 +22,11 @@ export function collectVars(debugState) {
   }))
 }
 
+function escapeHtml(s) {
+  if (s == null) return ''
+  return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
+}
+
 export function renderVars(container, debugState) {
   if (!container) return
   if (!debugState.vars || !debugState.vars.length) {
@@ -31,7 +36,7 @@ export function renderVars(container, debugState) {
   const rows = debugState.vars
     .map((v, idx) => {
       const active = idx === debugState.index ? 'active' : ''
-      return `<tr class="${active}"><td class="var-name">${v.name}</td><td class="var-value">${v.value}</td></tr>`
+      return `<tr class="${active}"><td class="var-name">${escapeHtml(v.name)}</td><td class="var-value">${escapeHtml(v.value)}</td></tr>`
     })
     .join('')
   container.innerHTML = `

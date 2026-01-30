@@ -6,9 +6,40 @@ import '../css/components.css'
 import '../css/pages.css'
 import '../css/responsive.css'
 
-ReactDOM.createRoot(document.getElementById('root')).render(
-  <React.StrictMode>
-    <App />
-  </React.StrictMode>,
-)
+class ErrorBoundary extends React.Component {
+  state = { error: null }
+  static getDerivedStateFromError(error) {
+    return { error }
+  }
+  componentDidCatch(error, info) {
+    console.error('App error:', error, info)
+  }
+  render() {
+    if (this.state.error) {
+      return (
+        <div style={{ padding: 24, fontFamily: 'sans-serif', maxWidth: 600 }}>
+          <h1 style={{ color: '#b00' }}>Chyba aplikácie</h1>
+          <pre style={{ background: '#f5f5f5', padding: 16, overflow: 'auto' }}>
+            {this.state.error.message}
+          </pre>
+          <p style={{ color: '#666' }}>Otvor konzolu prehliadača (F12) pre detail.</p>
+        </div>
+      )
+    }
+    return this.props.children
+  }
+}
+
+const root = document.getElementById('root')
+if (!root) {
+  document.body.innerHTML = '<p style="padding:24px">Chýba #root element.</p>'
+} else {
+  ReactDOM.createRoot(root).render(
+    <React.StrictMode>
+      <ErrorBoundary>
+        <App />
+      </ErrorBoundary>
+    </React.StrictMode>,
+  )
+}
 
