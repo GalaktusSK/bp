@@ -8,18 +8,25 @@ function Page({ label, title, subtitle, topExtra, children, currentRoute }) {
           {subtitle && <p className="page__subtitle">{subtitle}</p>}
           <div className="hero-toggle" role="group" aria-label="View switch">
             <button
-              className={currentRoute === 'login' ? 'active' : ''}
-              onClick={() => (window.location.hash = 'login')}
+              className={currentRoute === 'debugger' ? 'active' : ''}
+              onClick={() => (window.location.hash = 'debugger')}
               type="button"
             >
-              Login
+              Debugger
             </button>
             <button
-              className={currentRoute === 'register' ? 'active' : ''}
-              onClick={() => (window.location.hash = 'register')}
+              className={currentRoute === 'data-structures' ? 'active' : ''}
+              onClick={() => (window.location.hash = 'data-structures')}
               type="button"
             >
-              Register
+              Data Structures
+            </button>
+            <button
+              className={currentRoute === 'algorithms' ? 'active' : ''}
+              onClick={() => (window.location.hash = 'algorithms')}
+              type="button"
+            >
+              Algorithms
             </button>
           </div>
         </div>

@@ -6,6 +6,7 @@
 import * as parser from '@babel/parser'
 import generate from '@babel/generator'
 import * as t from '@babel/types'
+import traverse from '@babel/traverse'
 
 const STEP_VAR = '__step'
 const SCOPE_VAR = '__scope'
@@ -42,7 +43,7 @@ function getAssignedNames(node) {
     names.push(node.left.name)
     return names
   }
-  /* ExpressionStatement s priradením (text = "abc";) – treba zapisovať do __scope */
+  /* ExpressionStatement with assignment (text = "abc";) – needs to be written to __scope */
   if (t.isExpressionStatement(node) && t.isAssignmentExpression(node.expression) && t.isIdentifier(node.expression.left)) {
     names.push(node.expression.left.name)
     return names
@@ -51,10 +52,27 @@ function getAssignedNames(node) {
     names.push(node.expression.argument.name)
     return names
   }
+  // C string char mutation translated as __c_ptr_setChar(text, i, ch)
+  // should refresh the owning string variable in Variables panel.
+  if (
+    t.isExpressionStatement(node) &&
+    t.isCallExpression(node.expression) &&
+    t.isIdentifier(node.expression.callee, { name: '__c_ptr_setChar' })
+  ) {
+    const target = node.expression.arguments[0]
+    if (t.isIdentifier(target)) {
+      names.push(target.name)
+      return names
+    }
+    if (t.isMemberExpression(target) && t.isIdentifier(target.object)) {
+      names.push(target.object.name)
+      return names
+    }
+  }
   return names
 }
 
-/** Premenné menené v update výraze (i++, ++i, i += 1, …) */
+/** Variables modified in update expression (i++, ++i, i += 1, …) */
 function getUpdatedNames(expr) {
   if (!expr) return []
   if (t.isUpdateExpression(expr) && t.isIdentifier(expr.argument)) {
@@ -84,6 +102,35 @@ function scopeUpdates(names) {
 
 function flatten(arr) {
   return arr.reduce((acc, x) => acc.concat(Array.isArray(x) ? x : [x]), [])
+}
+
+function asyncifyFunctionsAndCalls(ast) {
+  const functionNames = new Set()
+
+  traverse(ast, {
+    FunctionDeclaration(path) {
+      if (!path.node.id?.name) return
+      if (path.node.id.name.startsWith('__c_')) return
+      functionNames.add(path.node.id.name)
+    },
+  })
+
+  traverse(ast, {
+    FunctionDeclaration(path) {
+      if (path.node.id?.name?.startsWith('__c_')) return
+      path.node.async = true
+    },
+  })
+
+  traverse(ast, {
+    CallExpression(path) {
+      if (!t.isIdentifier(path.node.callee)) return
+      if (!functionNames.has(path.node.callee.name)) return
+      if (t.isAwaitExpression(path.parent)) return
+      path.replaceWith(t.awaitExpression(path.node))
+      path.skip()
+    },
+  })
 }
 
 /**
@@ -127,18 +174,12 @@ function processStatement(node) {
   }
 
   if (t.isForStatement(node)) {
-    // Tok: 1 krok na riadok for (podmienka) → 1 krok na riadok tela (prvý príkaz v { }) → update → späť na for
+    // Flow: 1 step on for line (condition) → body lines individually → update → back to for
     const forLine = getLine(node)
-    const bodyLine = t.isBlockStatement(node.body) && node.body.body.length > 0
-      ? getLine(node.body.body[0])
-      : getLine(node.body)
     const updateLine = node.update ? getLine(node.update) : forLine
     const stepAtFor = stepCall(forLine)
-    const stepAtBody = stepCall(bodyLine)
     const stepAtUpdate = stepCall(updateLine)
-    const rawBody = t.isBlockStatement(node.body)
-      ? node.body
-      : t.blockStatement([node.body])
+    const instrumentedBody = processBody(node.body)
 
     const whileBody = [
       stepAtFor,
@@ -148,8 +189,7 @@ function processStatement(node) {
             t.breakStatement()
           )
         : null,
-      stepAtBody,
-      rawBody,
+      ...instrumentedBody.body,
       ...(node.update
         ? [
             stepAtUpdate,
@@ -175,7 +215,7 @@ function processStatement(node) {
       result.push(...scopeUpdates(loopVarNames))
     }
     result.push(whileLoop)
-    // let v for je block-scoped: po cykle premenná neexistuje – odstránime ju zo zobrazenia
+    // let in for is block-scoped: after the loop the variable no longer exists – remove it from display
     loopVarNames.forEach((name) => {
       result.push(
         t.expressionStatement(
@@ -190,7 +230,7 @@ function processStatement(node) {
   }
 
   if (t.isWhileStatement(node)) {
-    // Rovnako ako for: krok na riadok while (podmienka) → instrumentované telo (kroky + scope pre i++)
+    // Same as for: step on while line (condition) → instrumented body (steps + scope for i++)
     const whileLine = getLine(node)
     const stepAtWhile = stepCall(whileLine)
     const instrumentedBody = processBody(node.body)
@@ -210,7 +250,7 @@ function processStatement(node) {
   }
 
   if (t.isDoWhileStatement(node)) {
-    // do { body } while (test) → telo (už má kroky), krok na podmienku, overenie
+    // do { body } while (test) → body (already has steps), step on condition, check
     const conditionLine = getLine(node.test)
     const stepAtCondition = stepCall(conditionLine)
     const instrumentedBody = processBody(node.body)
@@ -230,7 +270,7 @@ function processStatement(node) {
   }
 
   if (t.isForInStatement(node)) {
-    // for (x in obj) { body } → krok na for-in, telo (už má kroky pred každým príkazom)
+    // for (x in obj) { body } → step on for-in, body (already has steps before each statement)
     const forInLine = getLine(node)
     const stepAtForIn = stepCall(forInLine)
     const instrumentedBody = processBody(node.body)
@@ -242,7 +282,7 @@ function processStatement(node) {
   }
 
   if (t.isForOfStatement(node)) {
-    // for (x of iterable) { body } → krok na for-of, telo (už má kroky pred každým príkazom)
+    // for (x of iterable) { body } → step on for-of, body (already has steps before each statement)
     const forOfLine = getLine(node)
     const stepAtForOf = stepCall(forOfLine)
     const instrumentedBody = processBody(node.body)
@@ -272,6 +312,21 @@ function processStatement(node) {
     return [step, t.tryStatement(block, handler, finalizer), ...updates]
   }
 
+  if (t.isFunctionDeclaration(node)) {
+    const isInternalHelper = node.id?.name?.startsWith('__c_')
+    if (isInternalHelper) {
+      // Keep internal runtime helpers untouched; instrumenting them can
+      // introduce awaits into non-async helper bodies and break execution.
+      return [node]
+    }
+    const body = processBlock(node.body)
+    return [
+      step,
+      t.functionDeclaration(node.id, node.params, body, node.generator, true),
+      ...updates,
+    ]
+  }
+
   if (t.isBlockStatement(node)) {
     const newBlock = processBlock(node)
     return [step, newBlock, ...updates]
@@ -287,6 +342,8 @@ export function instrumentJavaScript(source) {
       allowAwaitOutsideFunction: true,
       plugins: ['topLevelAwait'],
     })
+
+    asyncifyFunctionsAndCalls(ast)
 
     const newBody = flatten(ast.program.body.map((stmt) => processStatement(stmt)))
     ast.program.body = newBody

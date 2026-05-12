@@ -4,9 +4,9 @@ import { dots } from '../utils'
 function Contact({ currentRoute }) {
   return (
     <Page
-      label="Contact Us"
-      title="Feedback"
-      subtitle=""
+      label="Contact"
+      title="OCV"
+      subtitle="Online Code Visualizer"
       topExtra={dots(3)}
       currentRoute={currentRoute}
     >

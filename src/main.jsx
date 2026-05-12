@@ -18,11 +18,11 @@ class ErrorBoundary extends React.Component {
     if (this.state.error) {
       return (
         <div style={{ padding: 24, fontFamily: 'sans-serif', maxWidth: 600 }}>
-          <h1 style={{ color: '#b00' }}>Chyba aplikácie</h1>
+          <h1 style={{ color: '#b00' }}>Application Error</h1>
           <pre style={{ background: '#f5f5f5', padding: 16, overflow: 'auto' }}>
             {this.state.error.message}
           </pre>
-          <p style={{ color: '#666' }}>Otvor konzolu prehliadača (F12) pre detail.</p>
+          <p style={{ color: '#666' }}>Open the browser console (F12) for details.</p>
         </div>
       )
     }
@@ -32,7 +32,7 @@ class ErrorBoundary extends React.Component {
 
 const root = document.getElementById('root')
 if (!root) {
-  document.body.innerHTML = '<p style="padding:24px">Chýba #root element.</p>'
+  document.body.innerHTML = '<p style="padding:24px">Missing #root element.</p>'
 } else {
   ReactDOM.createRoot(root).render(
     <React.StrictMode>

@@ -3,33 +3,38 @@ import Topbar from './components/Topbar'
 import Landing from './pages/Landing'
 import Debugger from './pages/Debugger'
 import Contact from './pages/Contact'
+import DataStructures from './pages/DataStructures'
+import Algorithms from './pages/Algorithms'
 import Login from './pages/Login'
 import Register from './pages/Register'
 
 function App() {
   const [route, setRoute] = useState('landing')
-
+  //a
   useEffect(() => {
-    // Handle hash routing
     const handleHashChange = () => {
       const hash = window.location.hash.slice(1) || 'landing'
       setRoute(hash)
     }
-
+    //d
     handleHashChange()
     window.addEventListener('hashchange', handleHashChange)
     return () => window.removeEventListener('hashchange', handleHashChange)
   }, [])
-
+  //a
   const navigate = (newRoute) => {
     setRoute(newRoute)
     window.location.hash = newRoute
   }
-
+  //m
   const renderPage = () => {
     switch (route) {
       case 'debugger':
         return <Debugger currentRoute={route} />
+      case 'data-structures':
+        return <DataStructures currentRoute={route} />
+      case 'algorithms':
+        return <Algorithms currentRoute={route} />
       case 'contact':
         return <Contact currentRoute={route} />
       case 'login':

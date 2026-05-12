@@ -5,8 +5,8 @@ function Register({ currentRoute }) {
   return (
     <Page
       label="Register"
-      title="Sign up"
-      subtitle=""
+      title="OCV"
+      subtitle="Online Code Visualizer"
       topExtra={dots(3)}
       currentRoute={currentRoute}
     >

@@ -19,10 +19,34 @@ function Topbar({ currentRoute, onNavigate }) {
           Debugger
         </button>
         <button
+          className={`ghost ${currentRoute === 'data-structures' ? 'active' : ''}`}
+          onClick={() => onNavigate('data-structures')}
+        >
+          Data Structures
+        </button>
+        <button
+          className={`ghost ${currentRoute === 'algorithms' ? 'active' : ''}`}
+          onClick={() => onNavigate('algorithms')}
+        >
+          Algorithms
+        </button>
+        <button
+          className={`ghost ${currentRoute === 'login' ? 'active' : ''}`}
+          onClick={() => onNavigate('login')}
+        >
+          Login
+        </button>
+        <button
+          className={`ghost ${currentRoute === 'register' ? 'active' : ''}`}
+          onClick={() => onNavigate('register')}
+        >
+          Register
+        </button>
+        <button
           className={`ghost ${currentRoute === 'contact' ? 'active' : ''}`}
           onClick={() => onNavigate('contact')}
         >
-          Kontakt
+          Contact
         </button>
       </nav>
     </header>

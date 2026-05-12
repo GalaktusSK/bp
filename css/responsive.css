@@ -1,19 +1,7 @@
-/* Steps grid responsive */
-@media (min-width: 600px) and (max-width: 899px) {
-  .steps-grid {
-    grid-template-columns: repeat(2, 1fr) !important;
-  }
-}
-
-@media (min-width: 900px) {
-  .steps-grid {
-    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
-    max-width: 100%;
-  }
-  
-  .step-card {
-    max-width: none;
-    width: 100%;
+/* Landing features responsive */
+@media (max-width: 1099px) {
+  .landing-features {
+    grid-template-columns: 1fr !important;
   }
 }
 
@@ -39,7 +27,7 @@
     width: 100%;
   }
   
-  .result-grid {
+  .workspace-grid {
     grid-template-columns: 1fr !important;
     gap: 12px;
   }

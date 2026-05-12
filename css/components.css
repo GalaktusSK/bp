@@ -206,6 +206,7 @@
 .hero-toggle {
   display: inline-flex;
   align-items: center;
+  justify-self: center;
   gap: 8px;
   padding: 4px;
   background: var(--white);
@@ -223,6 +224,10 @@
   cursor: pointer;
   position: relative;
   z-index: 2;
+  text-align: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .hero-toggle .active {
@@ -357,7 +362,7 @@
   box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.05);
 }
 
-/* Ukážka dropdown – rovnaké písmo a farby ako sidebar (jazyky) */
+/* Sample dropdown – same font and colors as sidebar (languages) */
 .sample-select {
   width: 100%;
   padding: 8px 10px;

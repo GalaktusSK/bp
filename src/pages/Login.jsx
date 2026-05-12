@@ -4,9 +4,9 @@ import { dots } from '../utils'
 function Login({ currentRoute }) {
   return (
     <Page
-      label="Frame 1"
-      title="Login"
-      subtitle=""
+      label="Login"
+      title="OCV"
+      subtitle="Online Code Visualizer"
       topExtra={dots(3)}
       currentRoute={currentRoute}
     >

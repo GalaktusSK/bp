@@ -6,6 +6,17 @@ import { instrumentJavaScript, wrapInstrumentedCode } from './instrument'
 const STEP_VAR = '__step'
 const SCOPE_VAR = '__scope'
 
+function cloneSnapshot(value) {
+  try {
+    if (typeof structuredClone === 'function') return structuredClone(value)
+  } catch (_) {}
+  try {
+    return JSON.parse(JSON.stringify(value))
+  } catch (_) {
+    return value
+  }
+}
+
 /**
  * Creates a step controller: resolve() is called when user clicks "Step".
  * @returns {{ promise: Promise<number>, resolve: (line: number) => void }}
@@ -158,6 +169,7 @@ export function createJavaScriptExecutor(source, opts = {}) {
       },
       (err) => {
         runError = err.message || String(err)
+        done = true
         console.log = originalLog
         console.error = originalError
         console.warn = originalWarn
@@ -166,20 +178,24 @@ export function createJavaScriptExecutor(source, opts = {}) {
     return execution
   }
 
-  const executeStep = () => {
-    if (runError) return Promise.resolve({ done: true, error: runError })
+  const executeStep = async () => {
+    if (runError) return Promise.resolve({ done: true, error: runError, scope: cloneSnapshot(scope), output: outputBuffer })
     const next = stepResolvers.shift()
     if (next) {
       next.resolve(next.line)
-      // Let async code run to next await step()
-      return Promise.resolve().then(() => ({
+      await Promise.resolve()
+      if (!stepResolvers[0] && execution && !done && !runError) {
+        await execution
+      }
+      if (runError) return { done: true, error: runError, scope: cloneSnapshot(scope), output: outputBuffer }
+      return {
         done,
         line: stepResolvers[0] ? stepResolvers[0].line : null,
-        scope: { ...scope },
+        scope: cloneSnapshot(scope),
         output: outputBuffer,
-      }))
+      }
     }
-    if (done) return Promise.resolve({ done: true, scope: { ...scope }, output: outputBuffer })
+    if (done) return Promise.resolve({ done: true, scope: cloneSnapshot(scope), output: outputBuffer })
     return Promise.resolve({ done: false, waiting: true })
   }
 
@@ -189,7 +205,7 @@ export function createJavaScriptExecutor(source, opts = {}) {
     ok: true,
     start,
     executeStep,
-    getScope: () => ({ ...scope }),
+    getScope: () => cloneSnapshot(scope),
     getCurrentLine,
     getError: () => runError,
     isDone: () => done,
