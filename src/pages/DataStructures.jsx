@@ -541,6 +541,10 @@ function QueueViz() {
   )
 }
 
+function pseudoAddr(id) {
+  return `0x${((id * 0x410 + 0x1000) >>> 0).toString(16).toUpperCase()}`
+}
+
 function LinkedListViz() {
   const [items, setItems] = useState([])
   const [inputVal, setInputVal] = useState('')
@@ -625,9 +629,11 @@ function LinkedListViz() {
                       {isHead && isTail ? 'HEAD / TAIL' : isHead ? 'HEAD' : isTail ? 'TAIL' : ''}
                     </span>
                     <span className="ll-node-val">{item.value}</span>
-                    <span className="ll-node-ptr">{i < items.length - 1 ? 'next &#x2192;' : 'NULL'}</span>
+                    <span className="ll-node-ptr">
+                      {i < items.length - 1 ? pseudoAddr(items[i + 1].id) : 'NULL'}
+                    </span>
                   </div>
-                  {i < items.length - 1 && <div className="ll-arrow">&#x2192;</div>}
+                  {i < items.length - 1 && <div className="ll-arrow">→</div>}
                 </div>
               )
             })}

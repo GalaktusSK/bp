@@ -54,4 +54,3 @@ function Topbar({ currentRoute, onNavigate }) {
 }
 
 export default Topbar
-

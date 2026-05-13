@@ -1,8 +1,3 @@
-/**
- * Instruments JavaScript for line-by-line stepping: every statement (including
- * inside if/else, loops) gets await __step(line) before it. We build a new AST
- * recursively instead of mutating during traverse to avoid crashes.
- */
 import * as parser from '@babel/parser'
 import generate from '@babel/generator'
 import * as t from '@babel/types'
@@ -21,6 +16,18 @@ function stepCall(line) {
       t.callExpression(t.identifier(STEP_VAR), [t.numericLiteral(line)])
     )
   )
+}
+
+function getMemberAssignmentRootIdentifiers(memberExpr) {
+  if (!t.isMemberExpression(memberExpr)) return []
+  let cur = memberExpr
+  while (t.isMemberExpression(cur.object)) {
+    cur = cur.object
+  }
+  if (t.isIdentifier(cur.object)) {
+    return [cur.object.name]
+  }
+  return []
 }
 
 function getAssignedNames(node) {
@@ -43,17 +50,25 @@ function getAssignedNames(node) {
     names.push(node.left.name)
     return names
   }
-  /* ExpressionStatement with assignment (text = "abc";) – needs to be written to __scope */
-  if (t.isExpressionStatement(node) && t.isAssignmentExpression(node.expression) && t.isIdentifier(node.expression.left)) {
-    names.push(node.expression.left.name)
+  if (t.isAssignmentExpression(node) && t.isMemberExpression(node.left)) {
+    names.push(...getMemberAssignmentRootIdentifiers(node.left))
     return names
+  }
+  if (t.isExpressionStatement(node) && t.isAssignmentExpression(node.expression)) {
+    const left = node.expression.left
+    if (t.isIdentifier(left)) {
+      names.push(left.name)
+      return names
+    }
+    if (t.isMemberExpression(left)) {
+      names.push(...getMemberAssignmentRootIdentifiers(left))
+      return names
+    }
   }
   if (t.isExpressionStatement(node) && t.isUpdateExpression(node.expression) && t.isIdentifier(node.expression.argument)) {
     names.push(node.expression.argument.name)
     return names
   }
-  // C string char mutation translated as __c_ptr_setChar(text, i, ch)
-  // should refresh the owning string variable in Variables panel.
   if (
     t.isExpressionStatement(node) &&
     t.isCallExpression(node.expression) &&
@@ -72,7 +87,6 @@ function getAssignedNames(node) {
   return names
 }
 
-/** Variables modified in update expression (i++, ++i, i += 1, …) */
 function getUpdatedNames(expr) {
   if (!expr) return []
   if (t.isUpdateExpression(expr) && t.isIdentifier(expr.argument)) {
@@ -80,6 +94,9 @@ function getUpdatedNames(expr) {
   }
   if (t.isAssignmentExpression(expr) && t.isIdentifier(expr.left)) {
     return [expr.left.name]
+  }
+  if (t.isAssignmentExpression(expr) && t.isMemberExpression(expr.left)) {
+    return getMemberAssignmentRootIdentifiers(expr.left)
   }
   return []
 }
@@ -133,30 +150,18 @@ function asyncifyFunctionsAndCalls(ast) {
   })
 }
 
-/**
- * Process a block body: instrument every statement inside.
- * @param {import('@babel/types').BlockStatement} block
- * @returns {import('@babel/types').BlockStatement}
- */
 function processBlock(block) {
   if (!t.isBlockStatement(block)) return block
   const newBody = flatten(block.body.map((stmt) => processStatement(stmt)))
   return t.blockStatement(newBody)
 }
 
-/**
- * Process a single statement that might be used as loop/if body (can be one stmt or block).
- * Returns a BlockStatement with instrumented content.
- */
 function processBody(stmt) {
   if (t.isBlockStatement(stmt)) return processBlock(stmt)
   const nodes = processStatement(stmt)
   return t.blockStatement(nodes)
 }
 
-/**
- * Process one statement: returns array of nodes [stepCall, maybeModifiedNode, ...scopeUpdates].
- */
 function processStatement(node) {
   const line = getLine(node)
   const step = stepCall(line)
@@ -174,7 +179,6 @@ function processStatement(node) {
   }
 
   if (t.isForStatement(node)) {
-    // Flow: 1 step on for line (condition) → body lines individually → update → back to for
     const forLine = getLine(node)
     const updateLine = node.update ? getLine(node.update) : forLine
     const stepAtFor = stepCall(forLine)
@@ -204,20 +208,19 @@ function processStatement(node) {
       t.blockStatement(whileBody)
     )
 
-    const result = []
+    const inner = []
     let loopVarNames = []
     if (node.init) {
       const initStmt = t.isVariableDeclaration(node.init) || t.isExpressionStatement(node.init)
         ? node.init
         : t.expressionStatement(node.init)
       loopVarNames = getAssignedNames(initStmt)
-      result.push(initStmt)
-      result.push(...scopeUpdates(loopVarNames))
+      inner.push(initStmt)
+      inner.push(...scopeUpdates(loopVarNames))
     }
-    result.push(whileLoop)
-    // let in for is block-scoped: after the loop the variable no longer exists – remove it from display
+    inner.push(whileLoop)
     loopVarNames.forEach((name) => {
-      result.push(
+      inner.push(
         t.expressionStatement(
           t.unaryExpression(
             'delete',
@@ -226,11 +229,10 @@ function processStatement(node) {
         )
       )
     })
-    return result
+    return [t.blockStatement(inner)]
   }
 
   if (t.isWhileStatement(node)) {
-    // Same as for: step on while line (condition) → instrumented body (steps + scope for i++)
     const whileLine = getLine(node)
     const stepAtWhile = stepCall(whileLine)
     const instrumentedBody = processBody(node.body)
@@ -250,7 +252,6 @@ function processStatement(node) {
   }
 
   if (t.isDoWhileStatement(node)) {
-    // do { body } while (test) → body (already has steps), step on condition, check
     const conditionLine = getLine(node.test)
     const stepAtCondition = stepCall(conditionLine)
     const instrumentedBody = processBody(node.body)
@@ -270,7 +271,6 @@ function processStatement(node) {
   }
 
   if (t.isForInStatement(node)) {
-    // for (x in obj) { body } → step on for-in, body (already has steps before each statement)
     const forInLine = getLine(node)
     const stepAtForIn = stepCall(forInLine)
     const instrumentedBody = processBody(node.body)
@@ -282,7 +282,6 @@ function processStatement(node) {
   }
 
   if (t.isForOfStatement(node)) {
-    // for (x of iterable) { body } → step on for-of, body (already has steps before each statement)
     const forOfLine = getLine(node)
     const stepAtForOf = stepCall(forOfLine)
     const instrumentedBody = processBody(node.body)
@@ -315,14 +314,20 @@ function processStatement(node) {
   if (t.isFunctionDeclaration(node)) {
     const isInternalHelper = node.id?.name?.startsWith('__c_')
     if (isInternalHelper) {
-      // Keep internal runtime helpers untouched; instrumenting them can
-      // introduce awaits into non-async helper bodies and break execution.
       return [node]
     }
     const body = processBlock(node.body)
+    const paramNames = node.params
+      .map((p) => (t.isIdentifier(p) ? p.name : null))
+      .filter(Boolean)
+    const entryScope = scopeUpdates(paramNames)
+    const wrappedBody =
+      entryScope.length > 0
+        ? t.blockStatement([...entryScope, ...body.body])
+        : body
     return [
       step,
-      t.functionDeclaration(node.id, node.params, body, node.generator, true),
+      t.functionDeclaration(node.id, node.params, wrappedBody, node.generator, true),
       ...updates,
     ]
   }

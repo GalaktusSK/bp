@@ -34,4 +34,3 @@ function Register({ currentRoute }) {
 }
 
 export default Register
-

@@ -663,6 +663,14 @@ function Debugger({ currentRoute }) {
         onOutput: (text) => setOutput((o) => o + text),
       })
       if (!exec.ok) {
+        if (exec.runRemote === false) {
+          setError(exec.error)
+          setOutput((prev) => prev + (prev ? '\n' : '') + '[Error] ' + exec.error + '\n')
+          setCurrentLine(null)
+          setVars([])
+          setProgramFinished(true)
+          return
+        }
         setCLoading(true)
         try {
           const result = await runCCode(source)
@@ -828,8 +836,12 @@ function Debugger({ currentRoute }) {
 
   useEffect(() => {
     if (outputRef.current) {
-      const safe = output.replace(/</g, '&lt;').replace(/\n/g, '<br>') || '(no output)'
-      outputRef.current.innerHTML = `<pre class="output-pre">${safe}</pre>`
+      let pre = outputRef.current.querySelector('.output-pre')
+      if (!pre) {
+        outputRef.current.innerHTML = '<pre class="output-pre"></pre>'
+        pre = outputRef.current.querySelector('.output-pre')
+      }
+      pre.textContent = output || '(no output)'
     }
   }, [output])
 
@@ -883,64 +895,92 @@ function Debugger({ currentRoute }) {
 
         <div className="chat-window">
           <div className="chat-header">Debugger</div>
-          <div className="code-toolbar">
-            <button type="button" className="ghost" onClick={handleRun} disabled={pythonLoading || cLoading}>
-              {pythonLoading ? 'Loading Python…' : cLoading ? 'Running C…' : 'Run'}
-            </button>
-            <button type="button" className="ghost" onClick={handlePickFile}>
-              Upload file
-            </button>
-            <input
-              ref={fileInputRef}
-              type="file"
-              onChange={handleFileUpload}
-              accept={getLanguageExtension(language)}
-              style={{ display: 'none' }}
-              aria-label="Upload source code"
-            />
-            <button type="button" className="ghost" onClick={handleClear}>
-              Clear
-            </button>
-            {stepSupported && (
-              <>
-                <button
-                  type="button"
-                  className="ghost"
-                  onClick={handleStepBack}
-                  disabled={!executorRef.current || stepHistoryIndex <= 0}
-                  title="Step back"
-                >
-                  Step back
-                </button>
-                <button
-                  type="button"
-                  className="ghost"
-                  onClick={handleStep}
-                  disabled={!executorRef.current || isRunning || programFinished}
-                  title={programFinished ? 'Program finished' : 'Step forward'}
-                >
-                  Step forward
-                </button>
-              </>
-            )}
-          </div>
           {!stepSupported && language !== 'C' && (
             <div className="lang-info muted small">
               Stepping is only available for JavaScript. Run executes the full code.
             </div>
           )}
           <div className="workspace-grid">
-            <div className="code-editor" ref={codeEditorRef}>
-              <div className="code-gutter" ref={gutterRef} aria-hidden="true" />
-              <textarea
-                ref={codeInputRef}
-                className="code-input"
-                aria-label="Code input"
-                value={code}
-                onChange={(e) => setCode(e.target.value)}
-                wrap="off"
-                spellCheck={false}
-              />
+            <div className="debugger-editor-column">
+              <div className="code-editor" ref={codeEditorRef}>
+                <div className="code-gutter" ref={gutterRef} aria-hidden="true" />
+                <textarea
+                  ref={codeInputRef}
+                  className="code-input"
+                  aria-label="Code input"
+                  value={code}
+                  onChange={(e) => setCode(e.target.value)}
+                  wrap="off"
+                  spellCheck={false}
+                />
+              </div>
+              <div className="code-toolbar code-toolbar--below-editor" role="toolbar" aria-label="Debugger actions">
+                <button
+                  type="button"
+                  className="ghost code-toolbar__run"
+                  onClick={handleRun}
+                  disabled={pythonLoading || cLoading}
+                  aria-busy={pythonLoading || cLoading}
+                  title={
+                    pythonLoading
+                      ? 'Loading Python (Pyodide)…'
+                      : cLoading
+                        ? 'Running C…'
+                        : 'Run code'
+                  }
+                >
+                  <span
+                    className="code-toolbar__run-spinner"
+                    aria-hidden="true"
+                    data-active={pythonLoading || cLoading ? 'true' : 'false'}
+                  />
+                  <span>Run</span>
+                </button>
+                <button type="button" className="ghost" onClick={handlePickFile}>
+                  Upload file
+                </button>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  onChange={handleFileUpload}
+                  accept={getLanguageExtension(language)}
+                  style={{ display: 'none' }}
+                  aria-label="Upload source code"
+                />
+                <button type="button" className="ghost" onClick={handleClear}>
+                  Clear
+                </button>
+                {stepSupported && (
+                  <>
+                    <button
+                      type="button"
+                      className="ghost"
+                      onClick={handleStepBack}
+                      disabled={!executorRef.current || stepHistoryIndex <= 0}
+                      title="Step back"
+                    >
+                      Step back
+                    </button>
+                    <button
+                      type="button"
+                      className="ghost"
+                      onClick={handleStep}
+                      disabled={!executorRef.current || isRunning || programFinished}
+                      title={programFinished ? 'Program finished' : 'Step forward'}
+                    >
+                      Step forward
+                    </button>
+                  </>
+                )}
+              </div>
+              <div className="console-panel">
+                <div className="console-header">
+                  <span>Console</span>
+                </div>
+                <div className="code-box" ref={outputRef} aria-live="polite">
+                  <pre className="output-pre"></pre>
+                </div>
+              </div>
             </div>
             <div className="vars-panel" aria-live="polite">
               <div className="vars-header">
@@ -951,14 +991,7 @@ function Debugger({ currentRoute }) {
               </div>
             </div>
           </div>
-          <div className="console-panel">
-            <div className="console-header">
-              <span>Console</span>
-            </div>
-            <div className="code-box" ref={outputRef} aria-live="polite">
-              <pre className="output-pre"></pre>
-            </div>
-          </div>
+
         </div>
       </div>
     </Page>

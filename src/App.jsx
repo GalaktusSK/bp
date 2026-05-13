@@ -10,23 +10,19 @@ import Register from './pages/Register'
 
 function App() {
   const [route, setRoute] = useState('landing')
-  //a
   useEffect(() => {
     const handleHashChange = () => {
       const hash = window.location.hash.slice(1) || 'landing'
       setRoute(hash)
     }
-    //d
     handleHashChange()
     window.addEventListener('hashchange', handleHashChange)
     return () => window.removeEventListener('hashchange', handleHashChange)
   }, [])
-  //a
   const navigate = (newRoute) => {
     setRoute(newRoute)
     window.location.hash = newRoute
   }
-  //m
   const renderPage = () => {
     switch (route) {
       case 'debugger':
@@ -59,4 +55,3 @@ function App() {
 }
 
 export default App
-

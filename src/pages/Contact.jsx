@@ -36,4 +36,3 @@ function Contact({ currentRoute }) {
 }
 
 export default Contact
-

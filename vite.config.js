@@ -10,8 +10,7 @@ export default defineConfig({
     },
   },
   define: {
-    // Babel packages expect process.env; browser has no process
-    process: '({ env: { NODE_ENV: "development" } })',
+    'process.env.NODE_ENV': JSON.stringify('development'),
   },
 })
 

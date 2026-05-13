@@ -38,4 +38,3 @@ function Page({ label, title, subtitle, topExtra, children, currentRoute }) {
 }
 
 export default Page
-

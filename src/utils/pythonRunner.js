@@ -1,7 +1,4 @@
-/**
- * Runs Python code in the browser via Pyodide inside a Web Worker,
- * keeping the main thread responsive during loading and execution.
- */
+import { validateUserCode } from './safetyCheck'
 
 let worker = null
 let msgId = 0
@@ -43,11 +40,12 @@ async function ensureInit() {
   initialized = true
 }
 
-/**
- * Create a Python executor for step-by-step execution.
- */
 export async function createPythonExecutor(source) {
   try {
+    const safety = validateUserCode(source, 'Python')
+    if (!safety.ok) {
+      return { ok: false, error: safety.error }
+    }
     await ensureInit()
     await sendMessage('createExecutor', { source })
 
@@ -93,11 +91,12 @@ export async function createPythonExecutor(source) {
   }
 }
 
-/**
- * Run Python source (full, no stepping).
- */
 export async function runPython(source) {
   try {
+    const safety = validateUserCode(source, 'Python')
+    if (!safety.ok) {
+      return { success: false, error: safety.error }
+    }
     await ensureInit()
     return await sendMessage('runFull', { source })
   } catch (err) {

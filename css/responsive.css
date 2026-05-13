@@ -33,15 +33,17 @@
   }
   
   .code-toolbar {
-    flex-wrap: wrap;
-    justify-content: center;
+    flex-wrap: nowrap;
+    justify-content: flex-start;
     gap: 8px;
+    overflow-x: auto;
+    overflow-y: hidden;
   }
   
   .code-toolbar button {
+    flex-shrink: 0;
     min-width: 80px;
-    flex: 1 1 auto;
-    max-width: 120px;
+    max-width: none;
   }
   
   .lang-info {

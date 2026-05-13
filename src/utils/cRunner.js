@@ -1,4 +1,5 @@
 import { createJavaScriptExecutor } from './executor'
+import { validateUserCode } from './safetyCheck'
 
 const JUDGE0_API = 'https://ce.judge0.com'
 const JUDGE0_C_LANGUAGE_ID = 50
@@ -30,6 +31,11 @@ export async function runCCode(source) {
   const code = (source || '').trim()
   if (!code) {
     return { ok: false, error: 'Empty code.' }
+  }
+
+  const safety = validateUserCode(code, 'C')
+  if (!safety.ok) {
+    return { ok: false, error: safety.error }
   }
 
   try {
@@ -226,6 +232,11 @@ function normalizeCExpression(expr) {
   out = out.replace(/\bNULL\b/g, 'null')
   out = out.replace(/\btrue\b/g, 'true')
   out = out.replace(/\bfalse\b/g, 'false')
+  out = out.replace(/\bsizeof\s*\(\s*([A-Za-z_]\w*)\s*\)\s*\/\s*sizeof\s*\(\s*\1\s*\[\s*0\s*\]\s*\)/g, '$1.length')
+  out = out.replace(/\bsizeof\s*\(\s*char\s*\)/g, '1')
+  out = out.replace(/\bsizeof\s*\(\s*(?:int|float)\s*\)/g, '4')
+  out = out.replace(/\bsizeof\s*\(\s*(?:double|long|size_t|ssize_t)\s*\)/g, '8')
+  out = out.replace(/\bsizeof\s*\(\s*([A-Za-z_]\w*)\s*\)/g, '__c_sizeof($1)')
   out = out.replace(/\((?:unsigned\s+|signed\s+)?(?:long\s+long(?:\s+int)?|int|float|double|long|short|char|size_t|ssize_t|time_t|bool)\)\s*/g, '')
   out = out.replace(/\((?:unsigned|signed)\)\s*/g, '')
   out = out.replace(/\bstrlen\s*\(\s*([^)]+)\)/g, 'String($1).length')
@@ -233,11 +244,6 @@ function normalizeCExpression(expr) {
     /\bstrcmp\s*\(\s*([^,]+)\s*,\s*([^)]+)\)/g,
     '((String($1) === String($2)) ? 0 : (String($1) < String($2) ? -1 : 1))'
   )
-  out = out.replace(/\bsizeof\s*\(\s*([A-Za-z_]\w*)\s*\)\s*\/\s*sizeof\s*\(\s*\1\s*\[\s*0\s*\]\s*\)/g, '$1.length')
-  out = out.replace(/\bsizeof\s*\(\s*([A-Za-z_]\w*)\s*\)/g, '__c_sizeof($1)')
-  out = out.replace(/\bsizeof\s*\(\s*char\s*\)/g, '1')
-  out = out.replace(/\bsizeof\s*\(\s*(?:int|float)\s*\)/g, '4')
-  out = out.replace(/\bsizeof\s*\(\s*(?:double|long|size_t|ssize_t)\s*\)/g, '8')
   out = out.replace(/\btime\s*\(\s*[^)]*\s*\)/g, '__c_time()')
   out = out.replace(/\brand\s*\(\s*\)/g, '__c_rand()')
   out = out.replace(/\bdifftime\s*\(\s*([^,]+)\s*,\s*([^)]+)\)/g, '__c_difftime($1, $2)')
@@ -280,7 +286,12 @@ function convertDeclarationLine(line) {
           outParts.push(`let ${name} = Array(${d1}).fill(null).map(() => "");`)
         }
       } else {
-        outParts.push(`let ${name} = Array(${d1}).fill(null).map(() => []);`)
+        const nested = parseC2DNumericInitializerToJsLiteral(initRaw, arr2dMatch[2], arr2dMatch[3])
+        if (nested != null) {
+          outParts.push(`let ${name} = ${nested};`)
+        } else {
+          outParts.push(`let ${name} = __c_array(${d1}, Array(${d1}).fill(null).map(() => __c_array(${d2})));`)
+        }
       }
       continue
     }
@@ -299,19 +310,27 @@ function convertDeclarationLine(line) {
             const zeroFill = Math.max(0, parsedSize - values.length)
             const head = values.length ? values.join(', ') : ''
             const pad = zeroFill > 0 ? `${head ? ', ' : ''}${Array.from({ length: zeroFill }, () => '0').join(', ')}` : ''
-            outParts.push(`let ${name} = [${head}${pad}];`)
+            outParts.push(`let ${name} = __c_array(${parsedSize}, [${head}${pad}]);`)
           } else {
-            outParts.push(`let ${name} = [${values.join(', ')}];`)
+            outParts.push(`let ${name} = __c_array(${values.length}, [${values.join(', ')}]);`)
           }
         } else if (baseType === 'char' && /^".*"$/.test(initRaw)) {
-          outParts.push(`let ${name} = ${initRaw};`)
+          if (sizeRaw) {
+            outParts.push(`let ${name} = __c_char_buf_init(${normalizeCExpression(sizeRaw)}, ${initRaw});`)
+          } else {
+            outParts.push(`let ${name} = ${initRaw};`)
+          }
         } else {
           outParts.push(`let ${name} = ${normalizeCExpression(initRaw)};`)
         }
       } else if (baseType === 'char') {
-        outParts.push(`let ${name} = "";`)
+        if (sizeRaw) {
+          outParts.push(`let ${name} = __c_char_buf(${normalizeCExpression(sizeRaw)});`)
+        } else {
+          outParts.push(`let ${name} = "";`)
+        }
       } else if (sizeRaw) {
-        outParts.push(`let ${name} = Array(${normalizeCExpression(sizeRaw)});`)
+        outParts.push(`let ${name} = __c_array(${normalizeCExpression(sizeRaw)});`)
       } else {
         outParts.push(`let ${name} = [];`)
       }
@@ -339,10 +358,96 @@ function convertDeclarationLine(line) {
   return indent + outParts.join(' ')
 }
 
+function parseC2DNumericInitializerToJsLiteral(initRaw, dim1Expr, dim2Expr) {
+  const s = String(initRaw || '').trim()
+  if (!/^\{[\s\S]*\}$/.test(s)) return null
+  const inner = s.slice(1, -1).trim()
+  const d1s = dim1Expr != null ? String(dim1Expr).trim() : ''
+  const d2s = dim2Expr != null ? String(dim2Expr).trim() : ''
+  const constD1 = /^[0-9]+$/.test(d1s) ? Number(d1s) : NaN
+  const constD2 = /^[0-9]+$/.test(d2s) ? Number(d2s) : NaN
+  const hasDims = d1s && d2s
+
+  const zeroMatrixJs = () => {
+    if (Number.isFinite(constD1) && Number.isFinite(constD2)) {
+      return `__c_array(${constD1}, Array(${constD1}).fill(null).map(() => __c_array(${constD2})))`
+    }
+    if (hasDims) return `__c_array(${d1s}, Array(${d1s}).fill(null).map(() => __c_array(${d2s})))`
+    return null
+  }
+
+  if (!inner) {
+    const z = zeroMatrixJs()
+    return z != null ? z : '[]'
+  }
+
+  const topParts = splitByCommasTopLevel(inner)
+  const everyRowIsBrace = topParts.length > 0 && topParts.every((p) => /^\{[\s\S]*\}$/.test(p.trim()))
+
+  if (hasDims && !everyRowIsBrace) {
+    const flatScalars = topParts.every((p) => {
+      const t = p.trim()
+      return t && !t.includes('{') && !t.includes('}')
+    })
+    if (flatScalars && topParts.length >= 1) {
+      const vals = topParts.map((p) => normalizeCExpression(p.trim()))
+      if (Number.isFinite(constD1) && Number.isFinite(constD2)) {
+        const need = constD1 * constD2
+        const cells = vals.slice(0, need)
+        while (cells.length < need) cells.push('0')
+        const rows = []
+        for (let r = 0; r < constD1; r++) {
+          rows.push(`[${cells.slice(r * constD2, (r + 1) * constD2).join(', ')}]`)
+        }
+        return Number.isFinite(constD1)
+          ? `__c_array(${constD1}, [${rows.join(', ')}])`
+          : `[${rows.join(', ')}]`
+      }
+    }
+  }
+
+  const rowStrs = splitByCommasTopLevel(inner)
+  const rows = rowStrs.map((row) => {
+    const r = row.trim()
+    if (/^\{[\s\S]*\}$/.test(r)) {
+      const innerRow = r.slice(1, -1).trim()
+      const cells = innerRow ? splitByCommasTopLevel(innerRow).map((c) => normalizeCExpression(c.trim())) : []
+      return Number.isFinite(constD2) ? `__c_array(${constD2}, [${cells.join(', ')}])` : `[${cells.join(', ')}]`
+    }
+    return normalizeCExpression(r)
+  })
+
+  let literal = Number.isFinite(constD1) ? `__c_array(${constD1}, [${rows.join(', ')}])` : `[${rows.join(', ')}]`
+
+  if (Number.isFinite(constD1) && Number.isFinite(constD2)) {
+    const rowArrays = rowStrs.map((row) => {
+      const r = row.trim()
+      if (/^\{[\s\S]*\}$/.test(r)) {
+        const innerRow = r.slice(1, -1).trim()
+        return innerRow ? splitByCommasTopLevel(innerRow).map((c) => normalizeCExpression(c.trim())) : []
+      }
+      return [normalizeCExpression(r)]
+    })
+    while (rowArrays.length < constD1) {
+      rowArrays.push([])
+    }
+    rowArrays.splice(constD1)
+    for (let ri = 0; ri < rowArrays.length; ri++) {
+      const row = rowArrays[ri]
+      while (row.length < constD2) row.push('0')
+      row.splice(constD2)
+    }
+    literal = `__c_array(${constD1}, [${rowArrays.map((cells) => `__c_array(${constD2}, [${cells.join(', ')}])`).join(', ')}])`
+  }
+
+  return literal
+}
+
 function defaultValueForCType(typeName) {
-  if (typeName === 'char') return 'null'
-  if (typeName === 'bool') return 'null'
-  return 'null'
+  if (typeName === 'char') return '0'
+  if (typeName === 'bool') return 'false'
+  if (typeName === 'float' || typeName === 'double') return '0'
+  return '0'
 }
 
 function buildStructDefaultObjectExpr(structDef) {
@@ -367,7 +472,7 @@ function convertStructDeclarationLine(line, structTypes) {
     if (arrMatch) {
       const arrName = arrMatch[1]
       const sizeExpr = normalizeCExpression(arrMatch[2])
-      out.push(`let ${arrName} = Array(${sizeExpr}).fill(null).map(() => (${buildStructDefaultObjectExpr(def)}));`)
+      out.push(`let ${arrName} = __c_array(${sizeExpr}, Array(${sizeExpr}).fill(null).map(() => (${buildStructDefaultObjectExpr(def)})));`)
       continue
     }
     const scalarMatch = part.match(/^([A-Za-z_]\w*)$/)
@@ -408,18 +513,27 @@ function convertLineToJs(line) {
   out = out.replace(/\bputs\s*\(\s*([^)]+)\s*\)\s*;/g, 'console.log($1);')
   out = out.replace(/\bfprintf\s*\(\s*stderr\s*,\s*"([^"]*)"\s*(?:,\s*(.+?))?\s*\)\s*;/g, 'console.error("$1", $2);')
   out = out.replace(/\bscanf\s*\(.*\)\s*;/g, '')
-  out = out.replace(/\bstrcpy\s*\(\s*([A-Za-z_]\w*)\s*,\s*([^)]+)\)\s*;/g, '$1 = __c_strcpy($1, $2);')
-  out = out.replace(/\bstrncpy\s*\(\s*([A-Za-z_]\w*)\s*,\s*([A-Za-z_]\w*)\s*,\s*([^)]+)\)\s*;/g, '$1 = String($2).slice(0, $3);')
-  out = out.replace(/\bstrcat\s*\(\s*([A-Za-z_]\w*)\s*,\s*([A-Za-z_]\w*)\s*\)\s*;/g, '$1 = String($1) + String($2);')
+  const cLvalue = '([A-Za-z_]\\w*(?:\\[[^\\]]*\\])*)'
+  out = out.replace(new RegExp(`\\bstrcpy\\s*\\(\\s*${cLvalue}\\s*,\\s*([^)]+)\\)\\s*;`, 'g'), '$1 = __c_strcpy($1, $2);')
+  out = out.replace(
+    new RegExp(`\\bstrncpy\\s*\\(\\s*${cLvalue}\\s*,\\s*([^,]+)\\s*,\\s*([^)]+)\\)\\s*;`, 'g'),
+    '$1 = __c_strncpy($1, $2, $3);'
+  )
+  out = out.replace(new RegExp(`\\bstrcat\\s*\\(\\s*${cLvalue}\\s*,\\s*([^)]+)\\)\\s*;`, 'g'), '$1 = __c_strcat($1, $2);')
   out = out.replace(
     /\bchar\s+([A-Za-z_]\w*)\s*\[\s*([^\]]+)\s*\]\s*\[\s*([^\]]+)\s*\]\s*=\s*\{([^}]*)\}\s*;/g,
     'let $1 = [$4].map((s) => __c_strcpy("", s));'
   )
   out = out.replace(/\bchar\s+([A-Za-z_]\w*)\s*\[\s*\]\s*=\s*"([^"]*)"\s*;/g, 'let $1 = "$2";')
-  out = out.replace(/\bchar\s+([A-Za-z_]\w*)\s*\[\s*\d+\s*\]\s*=\s*"([^"]*)"\s*;/g, 'let $1 = "$2";')
-  out = out.replace(/\bchar\s+([A-Za-z_]\w*)\s*\[\s*\d+\s*\]\s*;/g, 'let $1 = "";')
-  out = out.replace(/\bint\s+([A-Za-z_]\w*)\s*\[\s*\]\s*=\s*\{([^}]*)\}\s*;/g, 'let $1 = [$2];')
-  out = out.replace(/\bint\s+([A-Za-z_]\w*)\s*\[\s*\d+\s*\]\s*=\s*\{([^}]*)\}\s*;/g, 'let $1 = [$2];')
+  out = out.replace(/\bchar\s+([A-Za-z_]\w*)\s*\[\s*(\d+)\s*\]\s*=\s*"([^"]*)"\s*;/g, 'let $1 = __c_char_buf_init($2, "$3");')
+  out = out.replace(/\bchar\s+([A-Za-z_]\w*)\s*\[\s*(\d+)\s*\]\s*;/g, 'let $1 = __c_char_buf($2);')
+  out = out.replace(/\bint\s+([A-Za-z_]\w*)\s*\[\s*\]\s*=\s*\{([^}]*)\}\s*;/g, (_, name, vals) => {
+    const items = vals.split(',').map((s) => s.trim()).filter(Boolean)
+    return `let ${name} = __c_array(${items.length}, [${vals}]);`
+  })
+  out = out.replace(/\bint\s+([A-Za-z_]\w*)\s*\[\s*(\d+)\s*\]\s*=\s*\{([^}]*)\}\s*;/g, (_, name, size, vals) => {
+    return `let ${name} = __c_array(${size}, [${vals}]);`
+  })
   out = out.replace(/\bint\s+([A-Za-z_]\w*)\s*=\s*([^;]+);/g, 'let $1 = $2;')
   out = out.replace(/\bint\s+([A-Za-z_]\w*)\s*;/g, 'let $1;')
   out = out.replace(/\bint\s+([A-Za-z_]\w*)\s*,\s*([A-Za-z_]\w*)\s*=\s*([^;]+);/g, 'let $1; let $2 = $3;')
@@ -619,6 +733,35 @@ function transformPointerCall(line, functionMeta) {
   return `${indent}${fn}(${outArgs.join(', ')});`
 }
 
+function collapseNumeric2DMatrixInitializers(lines) {
+  const out = [...lines]
+  const typeRe =
+    '(?:unsigned\\s+|signed\\s+)?(?:long\\s+long(?:\\s+int)?|int|float|double|long|short)'
+  for (let i = 0; i < out.length; i++) {
+    const line = out[i]
+    const m = line.match(new RegExp(`^(\\s*)(${typeRe})\\s+([A-Za-z_]\\w*)\\s*\\[\\s*([^\\]]+)\\s*\\]\\s*\\[\\s*([^\\]]+)\\s*\\]\\s*=\\s*\\{\\s*$`))
+    if (!m) continue
+    const indent = m[1] || ''
+    const baseType = m[2].replace(/\s+/g, ' ').trim()
+    const varName = m[3]
+    const d1 = m[4]
+    const d2 = m[5]
+    const chunks = []
+    let j = i + 1
+    while (j < out.length && !/^\s*};\s*$/.test(out[j])) {
+      chunks.push(out[j].trim())
+      out[j] = ''
+      j += 1
+    }
+    if (j >= out.length) continue
+    out[j] = ''
+    const innerJoined = chunks.join(' ').trim().replace(/,\s*$/, '')
+    out[i] = `${indent}${baseType} ${varName}[${d1}][${d2}] = { ${innerJoined} };`
+    i = j
+  }
+  return out
+}
+
 function collapseCharMatrixInitializers(lines) {
   const out = [...lines]
   for (let i = 0; i < out.length; i++) {
@@ -644,7 +787,9 @@ function collapseCharMatrixInitializers(lines) {
 }
 
 function cToJavaScript(source) {
-  const rawLines = collapseCharMatrixInitializers(String(source || '').split('\n'))
+  const rawLines = collapseNumeric2DMatrixInitializers(
+    collapseCharMatrixInitializers(String(source || '').split('\n'))
+  )
   const { lines, structTypes } = extractStructTypedefs(rawLines)
   const defines = extractDefines(lines)
   const functionMeta = parseFunctionMetadata(lines)
@@ -678,7 +823,6 @@ function cToJavaScript(source) {
     lineMap.push(lineNo)
   }
 
-  // Convert simple user-defined functions outside main().
   let i = 0
   while (i < lines.length) {
     const line = lines[i]
@@ -751,10 +895,41 @@ function cToJavaScript(source) {
     'function __c_ch(ch) { const s = String(ch ?? ""); return s ? s.charCodeAt(0) : 0; }',
     'function __c_ord(v) { const s = String(v ?? ""); return s ? s.charCodeAt(0) : 0; }',
     'function __c_sizeof(v) {',
+    '  if (v && typeof v === "object" && v.__c_char_buf === true) return v.cap;',
+    '  if (v && typeof v === "object" && v.__c_cap != null) return v.__c_cap;',
     '  if (Array.isArray(v)) return v.length;',
     '  if (typeof v === "string") return v.length || 1;',
     '  if (v && typeof v === "object") return Object.keys(v).length || 1;',
     '  return 8;',
+    '}',
+    'function __c_array(size, init) {',
+    '  const cap = Math.max(0, Number(size) | 0);',
+    '  let data = [];',
+    '  if (init !== undefined && init !== null) {',
+    '    data = Array.isArray(init) ? init.slice() : [init];',
+    '  }',
+    '  while (data.length < cap) data.push(0);',
+    '  if (data.length > cap) data.length = cap;',
+    '  data.__c_array = true;',
+    '  data.__c_cap = cap;',
+    '  return new Proxy(data, {',
+    '    get(target, prop, receiver) {',
+    '      if (prop === "__c_array" || prop === "__c_cap") return target[prop];',
+    '      const idx = typeof prop === "string" && /^\\d+$/.test(prop) ? Number(prop) : NaN;',
+    '      if (Number.isInteger(idx) && (idx < 0 || idx >= cap)) {',
+    '        throw new Error("Out of bounds: index " + idx + " (array size " + cap + ")");',
+    '      }',
+    '      const val = Reflect.get(target, prop, receiver);',
+    '      return typeof val === "function" ? val.bind(target) : val;',
+    '    },',
+    '    set(target, prop, value, receiver) {',
+    '      const idx = typeof prop === "string" && /^\\d+$/.test(prop) ? Number(prop) : NaN;',
+    '      if (Number.isInteger(idx) && (idx < 0 || idx >= cap)) {',
+    '        throw new Error("Out of bounds: index " + idx + " (array size " + cap + ")");',
+    '      }',
+    '      return Reflect.set(target, prop, value, receiver);',
+    '    },',
+    '  });',
     '}',
     'function __c_localtime(epochSec) {',
     '  const d = new Date(Number(epochSec ?? 0) * 1000);',
@@ -805,13 +980,63 @@ function cToJavaScript(source) {
     '  if (__c_isRef(ref)) ref.set(next);',
     '  return next;',
     '}',
-    'function __c_strcpy(_dst, src) { return String(src ?? ""); }',
+    'function __c_is_char_buf(v) { return v && typeof v === "object" && v.__c_char_buf === true; }',
+    'function __c_char_buf(cap) { return { __c_char_buf: true, cap: Math.max(0, Number(cap) | 0), s: "" }; }',
+    'function __c_buf_str(v) {',
+    '  if (__c_is_char_buf(v)) return v.s;',
+    '  if (__c_isRef(v)) return String(v.get() ?? "");',
+    '  return String(v ?? "");',
+    '}',
+    'function __c_char_buf_init(cap, init) {',
+    '  const b = __c_char_buf(cap);',
+    '  __c_strcpy(b, init);',
+    '  return b;',
+    '}',
+    'function __c_strcpy(dst, src) {',
+    '  const text = String(src ?? "");',
+    '  const need = text.length + 1;',
+    '  if (__c_is_char_buf(dst)) {',
+    '    if (need > dst.cap) throw new Error("buffer overflow: strcpy needs " + need + " bytes (incl. \\\'\\\\0\\\') but destination capacity is " + dst.cap);',
+    '    dst.s = text;',
+    '    return dst;',
+    '  }',
+    '  return text;',
+    '}',
+    'function __c_strncpy(dst, src, n) {',
+    '  const lim = Math.max(0, Number(n) | 0);',
+    '  const text = String(src ?? "").slice(0, lim);',
+    '  const need = text.length + 1;',
+    '  if (__c_is_char_buf(dst)) {',
+    '    if (need > dst.cap) throw new Error("buffer overflow: strncpy needs " + need + " bytes (incl. \\\'\\\\0\\\') but destination capacity is " + dst.cap);',
+    '    dst.s = text;',
+    '    return dst;',
+    '  }',
+    '  return text;',
+    '}',
+    'function __c_strcat(dst, src) {',
+    '  const add = String(src ?? "");',
+    '  if (__c_is_char_buf(dst)) {',
+    '    const combined = dst.s + add;',
+    '    const need = combined.length + 1;',
+    '    if (need > dst.cap) throw new Error("buffer overflow: strcat needs " + need + " bytes (incl. \\\'\\\\0\\\') but destination capacity is " + dst.cap);',
+    '    dst.s = combined;',
+    '    return dst;',
+    '  }',
+    '  return String(dst ?? "") + add;',
+    '}',
     'function __c_printf(fmt, ...args) {',
     "  const format = String(fmt ?? '');",
     '  let ai = 0;',
-    "  const out = format.replace(/%[-+ #0]*\\d*(?:\\.\\d+)?(?:hh|h|ll|l|L)?[dfsulxXo]/g, (token) => {",
+    "  const out = format.replace(/%[-+ #0]*\\d*(?:\\.\\d+)?(?:hh|h|ll|l|L)?[cdfsulxXo]/g, (token) => {",
     '    const val = args[ai++];',
     "    const t = token[token.length - 1];",
+    "    if (t === 's') return __c_buf_str(val);",
+    "    if (t === 'c') {",
+    '      const v = val;',
+    '      if (typeof v === "number" && Number.isFinite(v)) return String.fromCharCode(v);',
+    '      const s = String(v ?? "");',
+    '      return s ? s[0] : "\\0";',
+    '    }',
     "    if (t === 'd' || t === 'u') return String(Number(val ?? 0) | 0);",
     "    if (t === 'f') {",
     "      const m = token.match(/\\.(\\d+)f$/);",
@@ -829,13 +1054,20 @@ function cToJavaScript(source) {
 
 export function createCExecutor(source, opts = {}) {
   const raw = String(source || '').trim()
-  if (!raw) return { ok: false, error: 'Empty code.' }
+  if (!raw) return { ok: false, error: 'Empty code.', runRemote: false }
+
+  const safety = validateUserCode(raw, 'C')
+  if (!safety.ok) {
+    return { ok: false, error: safety.error, runRemote: false }
+  }
+
   if (
     /\b(open|read|write|close|fopen|fread|fwrite|fclose|fork|exec|pipe|dup2|lseek|mmap)\s*\(/.test(raw)
   ) {
     return {
       ok: false,
       error: 'This C code uses system/IO APIs that are not supported by the browser stepper.',
+      runRemote: true,
     }
   }
 
@@ -867,6 +1099,7 @@ export function createCExecutor(source, opts = {}) {
     return {
       ok: false,
       error: `C parsing error: ${exec.error}${detail}`,
+      runRemote: true,
     }
   }
 
